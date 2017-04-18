@@ -9,11 +9,15 @@ output:
 ```{r setup, include=FALSE}
 library(flexdashboard)
 library(tidyverse)
-library(htmlwidgets)
 library(lubridate)
 library(magrittr)
 library(data.table)
+
+library(htmlwidgets)
 library(leaflet)
+library(d3heatmap)
+library(dygraphs)
+library(xts)
 
 taxi <- read_csv("data/green_tripdata_2016-01.csv")
 
@@ -26,7 +30,7 @@ taxi <- taxi[taxi$trip_time > 60,]
 taxi <- taxi[taxi$trip_time < 18000,]
 ```
 
-Column {data-width=350}
+Column {data-width=400}
 -----------------------------------------------------------------------
 
 ### When they tippin'?
@@ -34,22 +38,19 @@ Column {data-width=350}
 Average tip by day of week and hour of pickup
 
 ```{r tip_heatmap}
-library(d3heatmap)
-
 taxi[, round(mean(Tip_amount), digits = 2), .(hour(lpep_pickup_datetime), wday(lpep_pickup_datetime))] %>% 
-  spread(key = wday, value = V1) %>% .[,c(2:8), with = F] %>% 
+  spread(key = wday, value = V1) %>% .[,c(2:8)] %>% 
   d3heatmap(dendrogram = "none", 
             labCol = c("Sun","Mon","Tues","Wed","Thur","Fri","Sat"),
-            colors = "Blues")
+            colors = "Blues",
+            xaxis_font_size = 14,
+            yaxis_font_size = 11)
 ```
 
 
 ### When they ridin'?
 
 ```{r}
-library(dygraphs)
-library(xts)
-
 taxi[, .N, as.IDate(lpep_pickup_datetime)] %>% as.xts() %>% 
   dygraph(main = "Number of Rides Taken in Green Cabs: Jan 2016") %>% 
   dyAxis("y", valueRange = c(0, 70000)) %>% 
@@ -57,7 +58,7 @@ taxi[, .N, as.IDate(lpep_pickup_datetime)] %>% as.xts() %>%
 ```
 
 
-Column {data-width=650}
+Column {data-width=600 .tabset}
 -----------------------------------------------------------------------
 
 ### Where they tippin'?
@@ -87,3 +88,21 @@ leaflet(tipmap) %>%
                    label = ~paste0("$", Tip_amount))
 ```
 
+
+### Clickable map
+
+```{r tipmap, message=FALSE, warning=FALSE, echo=FALSE}
+leaflet(tipmap[order(Tip_amount)]) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  setView(lng = -73.9, lat = 40.75, zoom = 11) %>%
+  addCircleMarkers(radius = 3, fillOpacity = 0.3, 
+                   color = ~pal(tip_cat), stroke = FALSE,
+                   label = ~paste0("$", Tip_amount),
+                   group = ~tip_cat) %>% 
+  addLayersControl(
+    overlayGroups = c("$0", "<$1", "$1.01-$2", 
+                      "$2.01-$4", "$4.01-$10", ">$10"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+```

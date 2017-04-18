@@ -50,7 +50,7 @@ taxi[, round(mean(Tip_amount), digits = 2), .(hour(lpep_pickup_datetime), wday(l
 
 ### When they ridin'?
 
-```{r}
+```{r timeseries}
 taxi[, .N, as.IDate(lpep_pickup_datetime)] %>% as.xts() %>% 
   dygraph(main = "Number of Rides Taken in Green Cabs: Jan 2016") %>% 
   dyAxis("y", valueRange = c(0, 70000)) %>% 
@@ -87,7 +87,6 @@ leaflet(tipmap) %>%
                    color = ~pal(tip_cat), stroke = FALSE,
                    label = ~paste0("$", Tip_amount))
 ```
-
 
 ### Clickable map
 

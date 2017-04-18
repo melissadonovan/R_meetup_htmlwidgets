@@ -1,0 +1,89 @@
+---
+title: "So You Want to Drive a Green Cab"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(htmlwidgets)
+library(lubridate)
+library(magrittr)
+library(data.table)
+library(leaflet)
+
+taxi <- read_csv("data/green_tripdata_2016-01.csv")
+
+setDT(taxi)
+taxi$trip_time <- taxi$Lpep_dropoff_datetime - taxi$lpep_pickup_datetime
+
+# minimal data cleaning
+# remove very long (> 5 hrs) and very short trips (< 1 min)
+taxi <- taxi[taxi$trip_time > 60,]
+taxi <- taxi[taxi$trip_time < 18000,]
+```
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### When they tippin'?
+
+Average tip by day of week and hour of pickup
+
+```{r tip_heatmap}
+library(d3heatmap)
+
+taxi[, round(mean(Tip_amount), digits = 2), .(hour(lpep_pickup_datetime), wday(lpep_pickup_datetime))] %>% 
+  spread(key = wday, value = V1) %>% .[,c(2:8), with = F] %>% 
+  d3heatmap(dendrogram = "none", 
+            labCol = c("Sun","Mon","Tues","Wed","Thur","Fri","Sat"),
+            colors = "Blues")
+```
+
+
+### When they ridin'?
+
+```{r}
+library(dygraphs)
+library(xts)
+
+taxi[, .N, as.IDate(lpep_pickup_datetime)] %>% as.xts() %>% 
+  dygraph(main = "Number of Rides Taken in Green Cabs: Jan 2016") %>% 
+  dyAxis("y", valueRange = c(0, 70000)) %>% 
+  dyRangeSelector()
+```
+
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+### Where they tippin'?
+
+Tip amounts by pickup location for a 1% sample of rides taken in January 2016
+
+```{r tip_map}
+set.seed(9486)
+tipmap <- taxi[sample(x = c(T,F), size = nrow(taxi), replace = T, prob = c(0.01,0.99)),
+               c("Pickup_latitude","Pickup_longitude","lpep_pickup_datetime",
+                 "Trip_distance","trip_time","Tip_amount")] %>% 
+            setnames(old = c("Pickup_latitude","Pickup_longitude","lpep_pickup_datetime"),
+                     new = c("lat", "long","pickup"))
+
+# make a color palette
+tipmap$tip_cat <- cut(x = tipmap$Tip_amount, c(0,0.01,1,2,4,10,1500), include.lowest = T,
+    labels = c("$0", "<$1", "$1.01-$2", "$2.01-$4", "$4.01-$10", ">$10"))
+pal <- colorFactor(palette = c("#fc8d59","#fdcc8a","#b2e2e2","#66c2a4","#2ca25f","#006d2c"), 
+                   domain = c("$0", "<$1", "$1.01-$2", "$2.01-$4", "$4.01-$10", ">$10"),
+                   ordered = T)
+
+leaflet(tipmap) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  setView(lng = -73.9, lat = 40.75, zoom = 11) %>%
+  addCircleMarkers(radius = 3, fillOpacity = 0.5, 
+                   color = ~pal(tip_cat), stroke = FALSE,
+                   label = ~paste0("$", Tip_amount))
+```
+

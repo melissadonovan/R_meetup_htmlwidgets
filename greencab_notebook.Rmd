@@ -5,9 +5,9 @@ output: html_notebook
 
 Using data from: http://www.nyc.gov/html/tlc/html/about/trip_record_data.shtml, we explore all trips taken in Green Cabs in New York City during January 2016.
 
-```{r get_data}
-library(tidyverse)
+```{r get_data, message=FALSE, warning=FALSE, echo=FALSE}
 library(htmlwidgets)
+library(tidyverse)
 library(lubridate)
 library(magrittr)
 library(data.table)
@@ -19,16 +19,16 @@ taxi$trip_time <- taxi$Lpep_dropoff_datetime - taxi$lpep_pickup_datetime
 
 # minimal data cleaning
 # remove very long (> 5 hrs) and very short trips (< 1 min)
-taxi <- taxi[taxi$trip_time > 60,]
-taxi <- taxi[taxi$trip_time < 18000,]
+taxi <- taxi[taxi$trip_time > 60]
+taxi <- taxi[taxi$trip_time < 18000]
 ```
 
 
-### When are people hailing Green Cabs? 
+## When are people hailing Green Cabs? 
 
 The following chart looks at pickup time by time of day and day of week
 
-```{r time_of_day_of_week}
+```{r time_of_day_of_week, message=FALSE, warning=FALSE, echo=FALSE}
 library(plotly)
 p <- taxi[, .N, .(hour(lpep_pickup_datetime), weekdays(lpep_pickup_datetime))] %>% 
       ggplot(aes(x = hour, y = N)) + geom_bar(stat = "identity") + 
@@ -45,7 +45,7 @@ ggplotly(p)
 
 ## When do drivers get fares?
 
-```{r dygraphs}
+```{r dygraphs, message=FALSE, warning=FALSE, echo=FALSE}
 library(dygraphs)
 library(xts)
 
@@ -62,10 +62,12 @@ taxi[, .N, as.IDate(lpep_pickup_datetime)] %>% as.xts() %>%
 library(d3heatmap)
 
 taxi[, round(mean(Tip_amount), digits = 2), .(hour(lpep_pickup_datetime), wday(lpep_pickup_datetime))] %>% 
-  spread(key = wday, value = V1) %>% .[,c(2:8), with = F] %>% 
+  spread(key = wday, value = V1) %>% .[,c(2:8)] %>% 
   d3heatmap(dendrogram = "none", 
             labCol = c("Sun","Mon","Tues","Wed","Thur","Fri","Sat"),
-            colors = "Blues")
+            colors = "Blues",
+            xaxis_font_size = 14,
+            yaxis_font_size = 11)
 
 ```
 
@@ -73,7 +75,7 @@ taxi[, round(mean(Tip_amount), digits = 2), .(hour(lpep_pickup_datetime), wday(l
 
 Occasionally someone gives a tip of $100 or more.  In January 2016 there were `r nrow(taxi[Tip_amount >= 100])` such rides in Green Cabs.  Where are these people getting picked up?  Mouseover for the trip distance and duration.
 
-```{r leaflet}
+```{r leaflet, message=FALSE, warning=FALSE, echo=FALSE}
 library(leaflet)
 
 # create a tidy data set
@@ -96,7 +98,7 @@ leaflet(big_tip) %>%
 
 Let's see if there are places where you might (or might not) want to pick someone up if you wanted to maximize your tips.
 
-```{r tipmap}
+```{r tipmap, message=FALSE, warning=FALSE, echo=FALSE}
 # make a 1% sample data set
 set.seed(9486)
 tipmap <- taxi[sample(x = c(T,F), size = nrow(taxi), replace = T, prob = c(0.01,0.99)),
@@ -106,7 +108,6 @@ tipmap <- taxi[sample(x = c(T,F), size = nrow(taxi), replace = T, prob = c(0.01,
                      new = c("lat", "long","pickup"))
 
 # make a color palette
-quantile(tipmap$Tip_amount, c(0, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1))
 tipmap$tip_cat <- cut(x = tipmap$Tip_amount, c(0,0.01,1,2,4,10,1500), include.lowest = T,
     labels = c("$0", "<$1", "$1.01-$2", "$2.01-$4", "$4.01-$10", ">$10"))
 pal <- colorFactor(palette = c("#fc8d59","#fdcc8a","#b2e2e2","#66c2a4","#2ca25f","#006d2c"), 
@@ -116,7 +117,25 @@ pal <- colorFactor(palette = c("#fc8d59","#fdcc8a","#b2e2e2","#66c2a4","#2ca25f"
 leaflet(tipmap) %>% 
   addProviderTiles(providers$CartoDB.Positron) %>% 
   setView(lng = -73.95, lat = 40.7, zoom = 10) %>%
-  addCircleMarkers(radius = 3, fillOpacity = 0.5, 
+  addCircleMarkers(radius = 3, fillOpacity = 0.3, 
                    color = ~pal(tip_cat), stroke = FALSE,
                    label = ~paste0("$", Tip_amount))
 ```
+
+```{r tipmap_filter, message=FALSE, warning=FALSE, echo=FALSE}
+
+leaflet(tipmap[order(Tip_amount)]) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  setView(lng = -73.95, lat = 40.7, zoom = 10) %>%
+  addCircleMarkers(radius = 3, fillOpacity = 0.3, 
+                   color = ~pal(tip_cat), stroke = FALSE,
+                   label = ~paste0("$", Tip_amount),
+                   group = ~tip_cat) %>% 
+  addLayersControl(
+    overlayGroups = c("$0", "<$1", "$1.01-$2", 
+                      "$2.01-$4", "$4.01-$10", ">$10"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+```
+
